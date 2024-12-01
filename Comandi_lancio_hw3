@@ -1,0 +1,5 @@
+ros2 run ros2_opencv ros2_opencv_node
+ros2 run rqt_image_view rqt_image_view
+ros2 launch iiwa_bringup iiwa.launch.py use_sim:="true"
+ros2 launch aruco_ros aruco_cam.launch.py
+
