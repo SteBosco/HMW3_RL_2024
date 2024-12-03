@@ -36,6 +36,7 @@ public:
     unsigned int getNrSgmts();
     void addEE(const KDL::Frame &_f_tip);
     void setJntLimits(KDL::JntArray &q_low, KDL::JntArray &q_high);
+    KDL::Chain getChain();
 
     // joints
     Eigen::MatrixXd getJntLimits();
@@ -57,6 +58,7 @@ public:
     KDL::Twist getEEBodyVelocity();
     KDL::Jacobian getEEJacobian();
     KDL::Jacobian getEEBodyJacobian();
+    KDL::Jacobian getEEJacDot();
     Eigen::VectorXd getEEJacDotqDot();
 
     // inverse kinematics

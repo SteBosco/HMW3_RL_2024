@@ -34,6 +34,10 @@ KDLRobot::KDLRobot(KDL::Tree &robot_tree)
     ikVelSol_ = new KDL::ChainIkSolverVel_pinv(chain_); //Inverse velocity solver 
 }
 
+KDL::Chain KDLRobot::getChain(){
+    return chain_;
+}
+
 void KDLRobot::getInverseKinematics(KDL::Frame &f, KDL::JntArray &q){
     int ret = ikSol_->CartToJnt(jntArray_,f,q);
     if(ret != 0) {std::cout << ikSol_->strError(ret) << std::endl;};
@@ -212,6 +216,12 @@ KDL::Jacobian KDLRobot::getEEBodyJacobian()
     //    std::cout << s_J_ee_.data << std::endl;
     //    return adjoint(toEigen(pkdl),toEigen(M))*s_J_ee_.data;
     return b_J_ee_;
+}
+
+KDL::Jacobian KDLRobot::getEEJacDot() {
+    KDL::Jacobian J_dot(chain_.getNrOfJoints()); // Inizializza il Jacobiano derivato
+    jntJacDotSol_->JntToJacDot(KDL::JntArrayVel(jntArray_, jntVel_), J_dot);
+    return J_dot;
 }
 
 Eigen::VectorXd KDLRobot::getEEJacDotqDot()

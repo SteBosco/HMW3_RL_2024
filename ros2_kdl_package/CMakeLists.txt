@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.8)
 project(ros2_kdl_package)
-
+ 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
-
+ 
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(orocos_kdl REQUIRED)
@@ -15,12 +15,12 @@ find_package(sensor_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
-
+ 
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
-
-add_executable(ros2_kdl_node src/ros2_kdl_node_ema.cpp src/kdl_robot.cpp src/kdl_planner.cpp src/kdl_control.cpp)
+ 
+add_executable(ros2_kdl_node src/kdl_robot.cpp src/kdl_planner.cpp src/kdl_control.cpp src/ros2_kdl_node.cpp)
 add_executable(ros2_kdl_node_vision_control src/ros2_kdl_vision_control.cpp src/kdl_robot.cpp src/kdl_planner.cpp src/kdl_control.cpp)
 target_include_directories(ros2_kdl_node PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -32,25 +32,25 @@ target_include_directories(ros2_kdl_node_vision_control PUBLIC
   ${EIGEN3_INCLUDE_DIRS})
 target_compile_features(ros2_kdl_node PUBLIC c_std_99 cxx_std_17)  # Require C99 and C++17
 target_compile_features(ros2_kdl_node_vision_control PUBLIC c_std_99 cxx_std_17)
-
-ament_target_dependencies(ros2_kdl_node 
+ 
+ament_target_dependencies(ros2_kdl_node
   orocos_kdl
   rclcpp
   kdl_parser
   sensor_msgs
   std_msgs
   geometry_msgs)
-ament_target_dependencies(ros2_kdl_node_vision_control 
+ament_target_dependencies(ros2_kdl_node_vision_control
   orocos_kdl
   rclcpp
   kdl_parser
   sensor_msgs
   std_msgs
   geometry_msgs)
-
+ 
 install(TARGETS ros2_kdl_node ros2_kdl_node_vision_control
   DESTINATION lib/${PROJECT_NAME})
-
+ 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   # the following line skips the linter which checks for copyrights
@@ -62,5 +62,5 @@ if(BUILD_TESTING)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
 endif()
-
+ 
 ament_package()

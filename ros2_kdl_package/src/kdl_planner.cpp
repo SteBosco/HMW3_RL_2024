@@ -9,7 +9,7 @@ KDLPlanner::KDLPlanner(double _maxVel, double _maxAcc)
 }
 
 //2a. store the arguments of the new constructors in the corresponding class variable
-//traiettoria lineare con profilo trapezoidale
+//Linear trajectory with trapezoidal profile
 KDLPlanner::KDLPlanner(double _trajDuration, double _accDuration, Eigen::Vector3d _trajInit, Eigen::Vector3d _trajEnd)
 {
     trajDuration_ = _trajDuration;
@@ -21,7 +21,7 @@ KDLPlanner::KDLPlanner(double _trajDuration, double _accDuration, Eigen::Vector3
 
 }
 
-//traiettoria lineare con profilo cubico
+//Linear trajectory with cubic profile
 KDLPlanner::KDLPlanner(double _trajDuration, Eigen::Vector3d _trajInit, Eigen::Vector3d _trajEnd)
 {
     trajDuration_ = _trajDuration;
@@ -31,7 +31,7 @@ KDLPlanner::KDLPlanner(double _trajDuration, Eigen::Vector3d _trajInit, Eigen::V
     path_type = LINEAR;
 }
 
-//traiettoria circolare con profilo trapezoidale
+//Circular trajectory with trapezoidal profile
 KDLPlanner::KDLPlanner(double _trajDuration, double _accDuration, Eigen::Vector3d _trajInit, double _trajRadius)
 {
     trajDuration_ = _trajDuration;
@@ -44,7 +44,7 @@ KDLPlanner::KDLPlanner(double _trajDuration, double _accDuration, Eigen::Vector3
 }
 
 
-//traiettoria circolare con profilo cubico
+//Circular trajectory with cubic profile
 KDLPlanner::KDLPlanner(double _trajDuration, Eigen::Vector3d _trajInit, double _trajRadius)
 {
     trajDuration_ = _trajDuration;
@@ -96,7 +96,7 @@ void KDLPlanner::createCircPath(KDL::Frame &_F_start,
 and returns three double variables s, s_dot and s_ddot that represent the curvilinear abscissa of your trajectory.*/
 void KDLPlanner::trapezoidal_vel(double t_, double tc_, double tf_, double &s, double &s_dot, double &s_ddot) {
   double sc_ddot;
-  sc_ddot=2/(tf_*tc_-std::pow(tc_,2));
+  sc_ddot=1/(tf_*tc_-std::pow(tc_,2));
 
   if(0 <= t_ && t_<= tc_)
   {
@@ -158,35 +158,7 @@ KDL::Trajectory* KDLPlanner::getTrajectory()
 
 trajectory_point KDLPlanner::compute_trajectory(double time)
 {
-  /* trapezoidal velocity profile with accDuration_ acceleration time period and trajDuration_ total duration.
-     time = current time
-     trajDuration_  = final time
-     accDuration_   = acceleration time
-     trajInit_ = trajectory initial point
-     trajEnd_  = trajectory final point */
-
-  // trajectory_point traj;
-
-  // Eigen::Vector3d ddot_traj_c = -1.0/(std::pow(accDuration_,2)-trajDuration_*accDuration_)*(trajEnd_-trajInit_);
-
-  // if(time <= accDuration_)
-  // {
-  //   traj.pos = trajInit_ + 0.5*ddot_traj_c*std::pow(time,2);
-  //   traj.vel = ddot_traj_c*time;
-  //   traj.acc = ddot_traj_c;
-  // }
-  // else if(time <= trajDuration_-accDuration_)
-  // {
-  //   traj.pos = trajInit_ + ddot_traj_c*accDuration_*(time-accDuration_/2);
-  //   traj.vel = ddot_traj_c*accDuration_;
-  //   traj.acc = Eigen::Vector3d::Zero();
-  // }
-  // else
-  // {
-  //   traj.pos = trajEnd_ - 0.5*ddot_traj_c*std::pow(trajDuration_-time,2);
-  //   traj.vel = ddot_traj_c*(trajDuration_-time);
-  //   traj.acc = -ddot_traj_c;
-  // }
+  
     double s, s_dot, s_ddot;
      trajectory_point traj;
 

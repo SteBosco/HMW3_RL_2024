@@ -17,9 +17,7 @@ public:
                            KDL::JntArray &_ddqd,
                            double _Kp,
                            double _Kd);
-    Eigen::VectorXd pd_plusgravity(KDL::JntArray &_qd,
-                                      KDL::JntArray &_dqd,
-                                      double _Kp, double _Kd);
+
     Eigen::VectorXd idCntr(KDL::Frame &_desPos,
                            KDL::Twist &_desVel,
                            KDL::Twist &_desAcc,
@@ -27,6 +25,11 @@ public:
                            double _Kpo,
                            double _Kdp,
                            double _Kdo);
+
+    Eigen::VectorXd pd_plusgravity(KDL::JntArray &_qd,
+                                      double _Kp, double _Kd);
+
+
 
 private:
 

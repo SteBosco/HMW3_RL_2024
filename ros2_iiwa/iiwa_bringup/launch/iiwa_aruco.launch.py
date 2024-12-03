@@ -303,10 +303,9 @@ def generate_launch_description():
         # condition=UnlessCondition(OrSubstitution(use_planning, use_sim)),
     )
     
-    
     iiwa_simulation_world = PathJoinSubstitution(
          [FindPackageShare(description_package),
-             'gazebo/worlds', 'sphere.world']
+             'gazebo/worlds', 'empty.world']
      )
 
     """declared_arguments.append(DeclareLaunchArgument('gz_args', default_value='-r -v 1 empty.sdf',

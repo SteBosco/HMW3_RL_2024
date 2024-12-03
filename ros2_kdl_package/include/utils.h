@@ -9,6 +9,15 @@
 typedef Eigen::Matrix<double, 6, 6> Matrix6d;
 typedef Eigen::Matrix<double, 6, 1> Vector6d;
 
+
+inline Eigen::VectorXd kdlJntArrayToEigenVector(const KDL::JntArray& kdlArray) {
+    Eigen::VectorXd eigenVector(kdlArray.rows());  // Crea un vettore Eigen con la stessa dimensione di KDL::JntArray
+    for (size_t i = 0; i < kdlArray.rows(); ++i) {
+        eigenVector(i) = kdlArray(i);  // Copia ogni elemento da KDL::JntArray a Eigen::VectorXd
+    }
+    return eigenVector;  // Restituisce il vettore Eigen
+}
+
 inline KDL::Vector toKDL(const Eigen::Vector3d& v)
 {
     return KDL::Vector(v[0],v[1],v[2]);
@@ -68,6 +77,14 @@ inline Vector6d toEigen(const KDL::Twist& t)
     e << toEigen(t.vel), toEigen(t.rot);
     return e;
 }
+
+// JacobainKDLToEigen
+inline Eigen::Matrix<double,6,Eigen::Dynamic> toEigen(const KDL::Jacobian &J)
+{
+    return J.data;
+}
+
+
 
 
 inline std::vector<double> toStdVector(const Eigen::VectorXd& V)
