@@ -55,7 +55,7 @@ def generate_launch_description():
             'marker_size': LaunchConfiguration('marker_size'),
             'marker_id': LaunchConfiguration('marker_id'),
             'reference_frame': LaunchConfiguration('reference_frame'),
-            'camera_frame': 'iiwa_camera_optical_frame',
+            'camera_frame': 'camera_link',
             'marker_frame': LaunchConfiguration('marker_frame'),
             'corner_refinement': LaunchConfiguration('corner_refinement'),
         }],

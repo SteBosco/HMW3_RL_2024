@@ -226,7 +226,7 @@
       <limit effort="40" lower="-3.0541" upper="3.0541" velocity="2.356"/>
   </joint>
   <joint name="${prefix}joint_a7-tool0" type="fixed">
-      <origin rpy="0 0 0" xyz="0 0 0.154"/>
+      <origin rpy="3.14 -1.57 0" xyz="0 0 0.154"/>
       <parent link="${prefix}link_7"/>
       <child link="${prefix}tool0"/>
       <axis xyz="0 0 0"/>
