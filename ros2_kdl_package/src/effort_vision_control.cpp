@@ -48,6 +48,11 @@ public:
             {
                 RCLCPP_INFO(get_logger(),"Selected task is not valid!"); return;
             }
+
+            std::cout<<"KP: ";
+            std::cin>>_Kp;
+            std::cout<<"\nKd: ";
+            std::cin>>_Kd;
  
         // Publisher per comandi di velocità
         // vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
@@ -156,7 +161,7 @@ public:
  
         Eigen::Vector3d end_position;
  
-        end_position << init_position[0], init_position[1], init_position[2]+0.1;
+        end_position << init_position[0], init_position[1], init_position[2]+0.08;
  
  
         double traj_duration = 1.5, acc_duration = 0.5, t = 0.0;
@@ -179,7 +184,7 @@ public:
                     // Create cmd publisher
                     
                     cmdPublisher_ = this->create_publisher<FloatArray>("/effort_controller/commands", 10);
-                    timer_ = this->create_wall_timer(std::chrono::milliseconds(20),
+                    timer_ = this->create_wall_timer(std::chrono::milliseconds(10),
                                                 std::bind(&VisionControlNode::cmd_publisher, this));
                     
                     for (long int i = 0; i < nj; ++i) {
@@ -220,7 +225,7 @@ private:
         t_+=dt;
         Eigen::Vector3d sd;
         sd<<0, 0, 1;
-        double k = -5;
+        double k = -2;
     
         if (t_ < total_time){
 
@@ -232,7 +237,8 @@ private:
         // Compute desired Frame
         KDL::Frame desFrame; desFrame.M = base_T_object.M; desFrame.p = base_T_object.p;
  
-        KDL::Frame cam_T_object(marker.M,marker.p);
+        KDL::Frame cam_T_object(marker.M*KDL::Rotation::RotY(-1.57),marker.p);
+        KDL::Frame terra=robot_->getEEFrame()*cam_T_object;
  
         // compute current jacobians
         KDL::Jacobian J_cam = robot_->getEEJacobian();
@@ -272,7 +278,7 @@ private:
                    Eigen::Vector3d orientation_error_cam = cam_o_error * s;
 
                     // Trasformazione nel frame base
-                    Eigen::Matrix3d base_R_cam = toEigen(base_T_object.M);  // Matrice di rotazione frame base -> camera
+                    Eigen::Matrix3d base_R_cam = toEigen(terra.M);  // Matrice di rotazione frame base -> camera
                     Eigen::Vector3d orientation_error = base_R_cam * orientation_error_cam;
                 
                 if(cmd_interface_ == "effort"){
@@ -292,7 +298,7 @@ private:
                     //Eigen::Vector3d cam_o_error = angular_error * s;
                     error = computeLinearError(p.pos, Eigen::Vector3d(cartpos.p.data));
                     //cam_o_error = computeOrientationError(toEigen(cartpos.M), toEigen(fd.M));
-                    std::cout << "o error norm " << error.norm() << std::endl;
+                    std::cout << "error norm " << error.norm() << std::endl;
  
                 
     
@@ -304,7 +310,7 @@ private:
                     
                     joint_velocity_old.data=joint_velocities_.data;
     
-                    Vector6d cartvel; cartvel << p.vel + 3*error, 0.8*o_error;
+                    Vector6d cartvel; cartvel << p.vel + 5*error, o_error;
                     //Update joint velocities, using the pseudoinverse of the end-effector Jacobian to map the desired Cartesian velocity (cartvel) in joint space:
                     dq_des.data = pseudoinverse(robot_->getEEJacobian().data)*cartvel ;
 
@@ -312,7 +318,7 @@ private:
                     q_des.data = joint_positions_.data + dq_des.data*dt;
     
                     //Calculate joint acceleration by discrete numerical derivative:
-                    joint_acceleration_d_.data=(joint_velocities_.data-joint_velocity_old.data)/dt;
+                    joint_acceleration_d_.data=(dq_des.data-joint_velocities_.data)/dt;
                     
                     //Use the first method (idCntr) to calculate the required joint torques:
                     torque_values = controller_.idCntr(q_des,dq_des,joint_acceleration_d_, _Kp, _Kd);
@@ -339,7 +345,7 @@ private:
 
                     desVel = KDL::Twist(KDL::Vector(cartvel[0], cartvel[1], cartvel[2]),KDL::Vector(cartvel[3],cartvel[4],cartvel[5]));
                     desAcc = KDL::Twist(KDL::Vector(p.acc[0], p.acc[1], p.acc[2]),KDL::Vector::Zero());
-                    desPos.M = base_T_object.M;
+                    desPos.M = terra.M;
                     desPos.p = desFrame.p; 
                     
                     //Use the second method (idCntr) to calculate the required joint torques:
@@ -463,10 +469,10 @@ private:
     KDL::Twist desAcc;
     KDL::Frame desPos;
     //Gains
-    double _Kp = 150 ;  // Example value for proportional gain
-    double _Kd =  30;   // Example value for derivative gain
+    double _Kp  ;  // Example value for proportional gain
+    double _Kd ;   // Example value for derivative gain
     double _Kpp = 100;
-    double _Kpo = 90;
+    double _Kpo = 100;
     double _Kdp = 2*sqrt(_Kpp);
     double _Kdo = 2*sqrt(_Kpo);
     double t_;

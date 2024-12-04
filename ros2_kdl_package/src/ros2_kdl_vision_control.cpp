@@ -28,16 +28,6 @@ public:
     :Node("ros2_kdl_vision_control"),
     node_handle_(std::shared_ptr<VisionControlNode>(this))
     {
-        // declare cmd_interface parameter ( velocity, effort or effort_cartesian)
-        declare_parameter<std::string>("cmd_interface", "velocity"); // defaults to "velocity"
-        get_parameter("cmd_interface", cmd_interface_);
-    
-        RCLCPP_INFO(get_logger(),"Current cmd interface is: '%s'", cmd_interface_.c_str());
-
-        if (!(cmd_interface_ == "velocity" || cmd_interface_ == "effort" || cmd_interface_ == "effort_cartesian"))
-        {
-            RCLCPP_INFO(get_logger(),"Selected cmd interface is not valid!"); return;
-        }
  
         // Dichiarazione del parametro del task
         declare_parameter<std::string>("task", "positioning");
@@ -48,12 +38,7 @@ public:
             {
                 RCLCPP_INFO(get_logger(),"Selected task is not valid!"); return;
             }
-       std::cout<<"INSERISCI kp: ";
-            std::cin>>_Kp;
-             
-         std::cout<<"INSERISCI kd: ";
-             std::cin>>_Kd;
-          
+ 
         // Publisher per comandi di velocità
         // vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>("/cmd_vel", 10);
  
@@ -101,14 +86,8 @@ public:
         robot_->setJntLimits(q_min,q_max);            
         joint_positions_.resize(nj);
         joint_velocities_.resize(nj);
-        qd.resize(nj);
         dqd.resize(nj);
         qdi.resize(nj);
-        joint_acceleration_d_.resize(nj);
-        joint_velocity_old.resize(nj);
-        torque_values.resize(nj);
-        q_des.resize(nj);
-        dq_des.resize(nj);
 
         // Subscriber to jnt states
         jointSubscriber_ = this->create_subscription<sensor_msgs::msg::JointState>(
@@ -141,11 +120,9 @@ public:
         Fi = robot_->getEEFrame();
         Eigen::Vector3d init_position = toEigen(Fi.p);
 
-        KDL::Chain chain = robot_->getChain();
-        fkSol_ = new KDL::ChainFkSolverPos_recursive(chain);
 
         // Initialize controller
-        KDLController controller_(*robot_);
+        //KDLController controller_(*robot_);
 
         // compute current jacobians
         KDL::Jacobian J_cam = robot_->getEEJacobian();
@@ -159,28 +136,11 @@ public:
         base_T_object.p = base_T_object.p; //+ KDL::Vector(0.2,0.04,p_offset);
         base_T_object.M = base_T_object.M;
 
-        Eigen::Vector3d end_position;
+        Eigen::Vector3d end_position = toEigen(base_T_object.p);
 
-        if(task_ == "positioning"){
-        
-            end_position = toEigen(base_T_object.p);
-        
-        }else{
-
-            end_position << -init_position[0], init_position[1], init_position[2];
-
-        }
 
         double traj_duration = 1.5, acc_duration = 0.5, t = 0.0;
-        if (cmd_interface_=="velocity") {
         planner_ = KDLPlanner(traj_duration, acc_duration, init_position, end_position); // currently using trapezoidal velocity profile
-
-        }
-        else {
-            //planner_ = KDLPlanner(traj_duration, init_position, 0.02); 
-        planner_ = KDLPlanner(traj_duration, acc_duration, init_position, end_position); // currently using trapezoidal velocity profile
-
-        }
 
         trajectory_point p = planner_.compute_trajectory(t);
 
@@ -191,14 +151,7 @@ public:
         robot_->getInverseKinematics(Fi, qdi);
         
 
-        if(task_ == "positioning" && aruco_available_ && joint_state_available_ ){
-            KDL::Frame aruco_world=robot_->getEEFrame()*marker;
-            std::cout<<"aruco position "<<aruco_world.p << std::endl;
-            std::cout<<"aruco orientation "<<aruco_world.M << std::endl;
-            KDL::Vector nominal_pos(1.30, -0.35, 0.62);
-            // KDL::Vector3d nominal_orient = (1.57, 0.01, 2.16);
-            std::cout<<"error position aruco "<<aruco_world.p-nominal_pos<<std::endl;
-
+        if((task_ == "positioning" || "look-at-point" ) && aruco_available_ && joint_state_available_  ){
 
             // Create cmd publisher
             cmdPublisher_ = this->create_publisher<FloatArray>("/velocity_controller/commands", 10);
@@ -211,37 +164,6 @@ public:
             }
 
         }
-        else if(task_ == "look-at-point" && aruco_available_ && joint_state_available_ ){
-            
-            if(cmd_interface_ == "velocity"){
-                    // Create cmd publisher
-                    cmdPublisher_ = this->create_publisher<FloatArray>("/velocity_controller/commands", 10);
-                    timer_ = this->create_wall_timer(std::chrono::milliseconds(100),
-                                                std::bind(&VisionControlNode::cmd_publisher, this));
-                
-                    // Send joint velocity commands
-                    for (long int i = 0; i < joint_velocities_.data.size(); ++i) {
-                        desired_commands_[i] = joint_velocities_(i);
-                    }
-                
-                }else if(cmd_interface_ == "effort" || cmd_interface_ == "effort_cartesian"){
-                    // Create cmd publisher
-                    
-                    cmdPublisher_ = this->create_publisher<FloatArray>("/effort_controller/commands", 10);
-                    timer_ = this->create_wall_timer(std::chrono::milliseconds(30),
-                                                std::bind(&VisionControlNode::cmd_publisher, this));
-                    
-                    for (long int i = 0; i < nj; ++i) {
-                        desired_commands_[i] = 0;
-                        
-                    }
-    
-                }else{
-    
-                    std::cout<<"Error!";
- 
-            }
-        }
 
         std_msgs::msg::Float64MultiArray cmd_msg;
         cmd_msg.data = desired_commands_;
@@ -253,32 +175,38 @@ public:
     }
  
 private:
+
+
+    // Variabili per la posizione precedente del marker ARUCO
+    Eigen::Vector3d prev_marker_pos = Eigen::Vector3d::Zero();  // inizializzazione della posizione precedente
+    double marker_velocity_threshold = 0.001;  // Soglia di velocità per il movimento del marker
+
+    // Funzione che calcola la velocità del marker ARUCO
+    bool is_marker_moving(const Eigen::Vector3d& current_pos) {
+        
+        Eigen::Vector3d delta_pos = current_pos - prev_marker_pos;
+        double speed = delta_pos.norm();
+        // Aggiorna la posizione precedente
+        prev_marker_pos = current_pos;
+        // Controlla se la velocità è superiore alla soglia
+        return speed > marker_velocity_threshold;
+    }
+
+
     void cmd_publisher() {
         
-    iteration_ = iteration_ + 1;
+        iteration_ = iteration_ + 1;
 
-    // define trajectory
-    double total_time = 1.5; //
-    int trajectory_len = 150; //
-    int loop_rate = trajectory_len / total_time;
-    double dt = 1.0 / loop_rate;
-    t_+=dt;
-    Eigen::Vector3d sd;
-    sd<<0, 0, 1;
-    double k = -10;
-    double thresh =0.05;
-            Eigen::Matrix<double,3,1> c_Po = toEigen(marker.p);
-         s = c_Po/c_Po.norm();
+        // define trajectory
+        double total_time = 1.5; //
+        int trajectory_len = 150; //
+        int loop_rate = trajectory_len / total_time;
+        double dt = 1.0 / loop_rate;
+        t_+=dt;
+        Eigen::Vector3d sd;
+        sd<<0, 0, 1;
+        double k = -10;
     
-    
-    double errornorm=(s-Eigen::Vector3d(0,0,1)).norm();
-    
-    
-
-    if (errornorm>thresh && t_<total_time && aruco_available_){
-
-
-        trajectory_point p = planner_.compute_trajectory(t_);
 
         //Compute EE frame
         KDL::Frame cartpos = robot_->getEEFrame();           
@@ -293,7 +221,7 @@ private:
         
         //calcolo matrici
         Eigen::Matrix<double,3,1> c_Po = toEigen(cam_T_object.p);
-         s = c_Po/c_Po.norm();
+        Eigen::Matrix<double,3,1> s = c_Po/c_Po.norm();
         Eigen::Matrix<double,3,3> Rc = toEigen(robot_->getEEFrame().M);
         Eigen::Matrix<double,3,3> L_block = (-1/c_Po.norm())*(Eigen::Matrix<double,3,3>::Identity()-s*s.transpose());
         Eigen::Matrix<double,3,6> L = Eigen::Matrix<double,3,6>::Zero();
@@ -314,179 +242,95 @@ private:
         // compute errors
         Eigen::Vector3d error = computeLinearError(Eigen::Vector3d(base_T_object.p.data), Eigen::Vector3d(cartpos.p.data));
         Eigen::Vector3d o_error = computeOrientationError(toEigen(cartpos.M), toEigen(base_T_object.M));
-        // std::cout << "The error norm is : " << error.norm() << std::endl;
-        std::cout << "s error norm " << (s-sd).norm() << std::endl;
-
-        KDLController controller_(*robot_);
+        std::cout << "The error norm is : " << error.norm() << std::endl;
+        //std::cout << "s error norm " << (s-sd).norm() << std::endl;
 
         if(task_ == "positioning"){
-            // Next Frame
-            // Compute differential IK
-            Vector6d cartvel; cartvel << 0.05*p.vel + 5*error, 0.1*o_error;
-            joint_velocities_.data = pseudoinverse(robot_->getEEJacobian().data)*cartvel;
-            joint_positions_.data = joint_positions_.data + joint_velocities_.data*dt;
+
+            if (t_ < total_time){
+
+
+                trajectory_point p = planner_.compute_trajectory(t_);
+
+                // Next Frame
+                // Compute differential IK
+                Vector6d cartvel; cartvel << 0.05*p.vel + 5*error, 0.1*o_error;
+                joint_velocities_.data = pseudoinverse(robot_->getEEJacobian().data)*cartvel;
+                joint_positions_.data = joint_positions_.data + joint_velocities_.data*dt;
+
+                // Update KDLrobot structure
+                    robot_->update(toStdVector(joint_positions_.data),toStdVector(joint_velocities_.data)); 
+                    
+                    // Send joint velocity commands
+                    for (long int i = 0; i < joint_velocities_.data.size(); ++i) {
+                    desired_commands_[i] = joint_velocities_(i);
+
+                    }
+
+                        std_msgs::msg::Float64MultiArray cmd_msg;
+                        cmd_msg.data = desired_commands_;
+                        cmdPublisher_->publish(cmd_msg);
+                }
+                else{
+
+
+                     // Send joint velocity commands
+                    for (long int i = 0; i < joint_velocities_.data.size(); ++i) {
+                        desired_commands_[i] = 0.0;
+                        //std::cout << "velocity commands " << joint_velocities_.data << std::endl;
+                }
+                RCLCPP_INFO_ONCE(this->get_logger(), "Trajectory executed successfully ...");
+
+                std_msgs::msg::Float64MultiArray cmd_msg;
+                cmd_msg.data = desired_commands_;
+                cmdPublisher_->publish(cmd_msg);
+                
+                
+            }    
         }
         else if(task_ == "look-at-point"){
             
-             if(cmd_interface_ == "velocity"){
-                
+            // Aggiungi la logica per verificare se l'ARUCO si muove
+                if (is_marker_moving(toEigen(cam_T_object.p))) {
+           
                 dqd.data=k*LJ_pinv*sd -1*N*(-qdi.data+joint_positions_.data);
+
+                // Update KDLrobot structure
+                robot_->update(toStdVector(joint_positions_.data),toStdVector(joint_velocities_.data));
+
+                 // Send joint velocity commands
+                    for (long int i = 0; i < dqd.data.size(); ++i){
+                        desired_commands_[i] = dqd(i);
+                    }
+
+                std_msgs::msg::Float64MultiArray cmd_msg;
+                cmd_msg.data = desired_commands_;
+                cmdPublisher_->publish(cmd_msg);
+  
+             }
             
-            }else if(cmd_interface_ == "effort"){
-               
-                //robot_->getInverseKinematics(base_T_object, joint_positions_);
-                dqd.data=k*LJ_pinv*sd -1*N*(-qdi.data+joint_positions_.data);
-
-                qd.data=qdi.data+dqd.data*dt;
-
-                // std::cout << "LJ_pinv: " << LJ_pinv << std::endl;
-                // std::cout << "N: " << N << std::endl;
-                // std::cout << "dqd: " << dqd.data.transpose() << std::endl;
-
-
-                // fk_solver.JntToCart(qd,fd);
-               double cos_theta = s.dot(sd); // Prodotto scalare tra i due vettori
-                cos_theta = std::max(-1.0, std::min(1.0, cos_theta)); // Assicura che il valore sia tra -1 e 1 per evitare errori numerici
-                double cam_o_error = std::acos(cos_theta);
-                
-                 Eigen::Vector3d orientation_error = cam_o_error * s;
-               // error = computeLinearError(p.pos, Eigen::Vector3d(cartpos.p.data));
-                // cam_o_error = computeOrientationError(toEigen(cartpos.M), toEigen(fd.M));
-                // std::cout << "o error norm " << cam_o_error.norm() << std::endl;
-
-                fkSol_->JntToCart(qd,fd);
-
-               // Eigen::Vector3d orientation_error = computeOrientationError(toEigen(desFrame.M), toEigen(cartpos.M));
-                //std::cout << "orientation error secondo look: " << orientation_error.norm() << std::endl;
-
-                
-                joint_velocity_old.data=joint_velocities_.data;
-
-                /*Combine a desired velocity p.vel with an error term for correction:
-                NOTE: The three zeros represent rotation components not considered here!*/
-                Vector6d cartvel; cartvel << 0.05*p.vel + 2*error, 0.1*orientation_error;
-                
-                //Update joint velocities, using the pseudoinverse of the end-effector Jacobian to map the desired Cartesian velocity (cartvel) in joint space:
-                dq_des.data = pseudoinverse(robot_->getEEJacobian().data)*cartvel;
-
-                //Calculate the new joint positions by integrating the velocities (joint_velocities_) with the time step dt:
-                q_des.data = joint_positions_.data + dq_des.data*dt;
-
-                //Calculate joint acceleration by discrete numerical derivative:
-                joint_acceleration_d_.data=(dq_des.data-joint_velocity_old.data)/dt;
-                
-                //Use the first method (idCntr) to calculate the required joint torques:
-                torque_values = controller_.idCntr(q_des,dq_des,joint_acceleration_d_, _Kp, _Kd);
-            }
-            else if(cmd_interface_ == "effort_cartesian"){
-                
-                
-                Vector6d cartacc; cartacc << p.acc + error/dt, 0,0,0;
-                desVel = KDL::Twist(KDL::Vector(p.vel[0], p.vel[1], p.vel[2]),KDL::Vector::Zero());
-                desAcc = KDL::Twist(KDL::Vector(p.acc[0], p.acc[1], p.acc[2]),KDL::Vector::Zero());
-                desPos.M = desFrame.M;
-                desPos.p = desFrame.p; //Forse moltiplicare per Re
-                
-                //Use the second method (idCntr) to calculate the required joint torques:
-                torque_values=controller_.idCntr(desPos,desVel,desAcc,_Kpp,_Kpo,_Kdp,_Kdo);
-
-            }
             else{
 
-                std::cout<<"Error!";
-            }
-            
+            for (long int i = 0; i < joint_velocities_.data.size(); ++i) {
+                    desired_commands_[i] = 0.0;
+                    //std::cout << "velocity commands " << joint_velocities_.data << std::endl;
 
+                // Create msg and publish
+                std_msgs::msg::Float64MultiArray cmd_msg;
+                cmd_msg.data = desired_commands_;
+                cmdPublisher_->publish(cmd_msg);
+
+            }
+
+            }
         }
         else{
         RCLCPP_WARN(this->get_logger(), "Unknown task: %s", task_.c_str());
         return;
         }
 
-        // Update KDLrobot structure
-        robot_->update(toStdVector(joint_positions_.data),toStdVector(joint_velocities_.data));   
-
-       if(task_ == "positioning"){
-
-            // Send joint velocity commands
-            for (long int i = 0; i < joint_velocities_.data.size(); ++i) {
-                desired_commands_[i] = joint_velocities_(i);
-            }
-            
-        }
-        else if(task_ == "look-at-point"){
-            
-           if(cmd_interface_ == "velocity"){
-                   
-                    // Send joint velocity commands
-                    for (long int i = 0; i < dqd.data.size(); ++i){
-                        desired_commands_[i] = dqd(i);
-                    }
-
-                }
-            else if(cmd_interface_ == "effort" || cmd_interface_ == "effort_cartesian"){
-                    
-                     // Send joint velocity commands
-                    for (long int i = 0; i < torque_values.size(); ++i) {
-                        desired_commands_[i] = torque_values(i);
-                    }
- 
-                }else{
- 
-                    std::cout<<"Error!";
-            }
-
-        }           
-
-        
-        std_msgs::msg::Float64MultiArray cmd_msg;
-        cmd_msg.data = desired_commands_;
-        cmdPublisher_->publish(cmd_msg);
-
-    } 
-    
-    else{
-           RCLCPP_INFO_ONCE(this->get_logger(), "Trajectory executed successfully ...");
- // Send joint effort commands
-                if(cmd_interface_ == "effort" || cmd_interface_ == "effort_cartesian" ){
-                
-                    KDLController controller_(*robot_);
-                    q_des.data=joint_positions_.data;
-                    // Azzerare i valori di qd (velocità dei giunti)
-                    dq_des.data = Eigen::VectorXd::Zero(7,1);
-                    // // Azzerare i valori di qdd (accelerazioni dei giunti)
-                    joint_acceleration_d_.data = Eigen::VectorXd::Zero(7,1);
- 
-                    torque_values = controller_.idCntr(q_des,dq_des,joint_acceleration_d_, _Kp, _Kd);
-                    
-                    // // Update KDLrobot structure
-                    robot_->update(toStdVector(joint_positions_.data),toStdVector(joint_velocities_.data));  
-                    
-                    for (long int i = 0; i < torque_values.size(); ++i) {
-    
-                        desired_commands_[i] = torque_values(i);
-                        //std::cout << "torque commands " << torque_values << std::endl;
-
-                    }
-                }
-                else{
-                     // Send joint velocity commands
-                    for (long int i = 0; i < joint_velocities_.data.size(); ++i) {
-                        desired_commands_[i] = 0.0;
-                        std::cout << "velocity commands " << joint_velocities_.data << std::endl;
-
-                    }
-                }
-
-                t_=0.0;
-                        // Create msg and publish
-        std_msgs::msg::Float64MultiArray cmd_msg;
-        cmd_msg.data = desired_commands_;
-        cmdPublisher_->publish(cmd_msg);
-        }
-    
-
     }
+    
 
     void aruco_subscriber(const geometry_msgs::msg::PoseStamped& pose_msg){ 
  
@@ -528,33 +372,14 @@ private:
     std::vector<double> desired_commands_ = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     KDL::JntArray joint_positions_;
     KDL::JntArray joint_velocities_;
-    KDL::JntArray qd;
     KDL::JntArray dqd;
     KDL::JntArray qdi;
     std::shared_ptr<KDLRobot> robot_;
     KDLPlanner planner_;
-    std::string task_, cmd_interface_;
+    std::string task_;
     KDL::Frame marker;
     KDL::Frame Fi;
-    KDL::Frame fd;
     KDL::Frame base_T_object;
-    KDL::JntArray joint_acceleration_d_;
-    KDL::ChainFkSolverPos_recursive* fkSol_;
-    KDL::JntArray joint_velocity_old;
-    Eigen::VectorXd torque_values;
-    KDL::JntArray q_des;
-    KDL::JntArray dq_des;
-    KDL::Twist desVel;
-    KDL::Twist desAcc;
-    KDL::Frame desPos;
-    Eigen::Matrix<double,3,1> s ;
-    //Gains
-    double _Kp  ;  // Example value for proportional gain
-    double _Kd ;   // Example value for derivative gain
-    double _Kpp = 90;
-    double _Kpo = 90;
-    double _Kdp = 2*sqrt(_Kpp);
-    double _Kdo = 2*sqrt(_Kpo);
     double t_;
     int iteration_;
     bool joint_state_available_;
