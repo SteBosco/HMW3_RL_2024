@@ -214,7 +214,7 @@ private:
         t_+=dt;
         Eigen::Vector3d sd;
         sd<<0, 0, 1;
-        double k = -2;
+        double k = 1;
 
         KDL::Frame marker_wrt_camera(marker.M, 
         KDL::Vector(marker.p[0],marker.p[1],marker.p[2]));
