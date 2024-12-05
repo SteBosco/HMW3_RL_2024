@@ -44,7 +44,7 @@ def generate_launch_description():
         ),
     ]
 
-    # Node configuration
+    #Node configuration
     aruco_single_node = Node(
         package='aruco_ros',
         executable='single',

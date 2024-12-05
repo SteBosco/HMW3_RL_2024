@@ -113,7 +113,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'start_rviz',
             default_value='false',
-            description='Start RViz2 automatically with this launch file.',
+            description='Start rViz2 automatically with this launch file.',
         )
     )
     declared_arguments.append(
