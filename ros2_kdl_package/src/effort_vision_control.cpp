@@ -65,7 +65,7 @@ public:
  
         // Subscriber to jnt states
         arucoSubscriber_ = this->create_subscription<geometry_msgs::msg::PoseStamped>(
-                "/aruco_single/pose", 10, std::bind(&VisionControlNode::aruco_subscriber, this, std::placeholders::_1));
+                "/aruco_single/pose", 1, std::bind(&VisionControlNode::aruco_subscriber, this, std::placeholders::_1));
  
         //     // Wait for the joint_state topic
         while(!aruco_available_){
@@ -143,7 +143,6 @@ public:
 
         // Initialize controller
         //KDLController controller_(*robot_);
-
         // compute current jacobians
         KDL::Jacobian J_cam = robot_->getEEJacobian();
 
@@ -151,14 +150,15 @@ public:
         KDL::Frame marker_wrt_camera(marker.M, 
         KDL::Vector(marker.p.data[0],marker.p.data[1]-0.12,marker.p.data[2]-0.27));
         cam_link_to_optical= KDL::Frame(KDL::Rotation::Quaternion(-0.5,0.5,-0.5,0.5),KDL::Vector(0,0,0));
+
         marker_wrt_world =  robot_->getEEFrame() * cam_link_to_optical* marker_wrt_camera;
 
 
         // double p_offset = 0.02;     // Position offset
         // double R_offset = 0.314/2;     // Orientation offset. Put at 0 to centre the aruco
 
-
-        end_position << init_position[0], -0.2+init_position[1], init_position[2];        
+        end_position<<marker_wrt_world.p.data[0],marker_wrt_world.p.data[1]-0.1,marker_wrt_world.p.data[2];
+        //end_position << init_position[0], init_position[1], init_position[2]+0.1;        
         end_orientation = marker_wrt_world.M;
 
 
@@ -262,7 +262,8 @@ private:
 
 
         // compute errors
-        Eigen::Vector3d error = computeLinearError(Eigen::Vector3d(desFrame.p.data), Eigen::Vector3d(cartpos.p.data));
+        Eigen::Vector3d error ;
+      //  Eigen::Vector3d error = computeLinearError(Eigen::Vector3d(desFrame.p.data), Eigen::Vector3d(cartpos.p.data));
         //Eigen::Vector3d o_error = computeOrientationError(toEigen(cartpos.M), toEigen(desFrame.M));
         //std::cout << "The error norm is : " << error.norm() << std::endl;
        // std::cout << "orientation error norm " << o_error.norm() << std::endl;
@@ -270,19 +271,34 @@ private:
  
         KDLController controller_(*robot_);
  
-                    double cos_theta = s.dot(sd); // Prodotto scalare tra i due vettori
-                    cos_theta = std::max(-1.0, std::min(1.0, cos_theta)); // Assicura che il valore sia tra -1 e 1 per evitare errori numerici
-                    //double angular_error = std::acos(cos_theta);
-                    double cam_o_error = std::acos(cos_theta);
+                //     double cos_theta = s.dot(sd); // Prodotto scalare tra i due vettori
+                //     cos_theta = std::max(-1.0, std::min(1.0, cos_theta)); // Assicura che il valore sia tra -1 e 1 per evitare errori numerici
+                //     //double angular_error = std::acos(cos_theta);
+                //     double cam_o_error = std::acos(cos_theta);
 
-                   Eigen::Vector3d orientation_error_cam = s.cross(sd);
-                  // Eigen::Matrix3d rotation_matrix;
-                    //rotation_matrix = Eigen::AngleAxisd(cam_o_error, orientation_error_cam.normalized());
+                //     Eigen::Vector3d orientation_error_cam = s.cross(sd);
+                //    Eigen::Matrix3d rotation_matrix;
+                // rotation_matrix = Eigen::AngleAxisd(cam_o_error, orientation_error_cam.normalized());
 
 
-                    // Trasformazione nel frame base
-                    Eigen::Vector3d orientation_error = toEigen(robot_->getEEFrame().M *cam_link_to_optical.M*KDL::Rotation::RotY(-1.57)*KDL::Rotation::RotZ(0)*KDL::Rotation::RotX(1.57))*s* cam_o_error;
-                            std::cout << "sorientation norm " << orientation_error.norm() << std::endl;
+                //     // Trasformazione nel frame base
+                //     Eigen::Vector3d orientation_error = toEigen(robot_->getEEFrame().M)*rotation_matrix*s*cam_o_error;
+                //     std::cout << "sorientation norm " << orientation_error.norm() << std::endl;
+
+                KDL::Rotation marker_rotation = KDL::Rotation::Quaternion(0.987768, 0.0143854, 0.0120959, 0.154791);
+    KDL::Rotation ee_rotation = KDL::Rotation::Quaternion(0.0, 0.0, 0.0, 1.0);
+ 
+    // Calcolo della rotazione relativa (differenza tra le due rotazioni)
+    KDL::Rotation error_rotation = ee_rotation.Inverse() * marker_rotation;
+    double angle_error;
+    // Estrazione dell'angolo di rotazione e dell'assedouble angle_error;
+    KDL::Vector axis_error;
+    error_rotation.GetRotAngle(axis_error, angle_error);
+ 
+    // Stampa dei risultati
+    std::cout << "Errore di rotazione (angolo): " << angle_error << " radianti" << std::endl;
+    std::cout << "Asse di rotazione dell'errore: (" << axis_error.x() << ", " << axis_error.y() << ", " << axis_error.z() << ")" << std::endl;
+
 
                 
                 if(cmd_interface_ == "effort"){
@@ -312,17 +328,17 @@ private:
                     //std::cout << "orientation error secondo look: " << orientation_error.norm() << std::endl;
     
                     
-                    joint_velocity_old.data=dq_des.data;
+                    joint_velocity_old.data=joint_velocities_.data;
     
-                    Vector6d cartvel; cartvel << p.vel + error, 5*orientation_error;
+                    Vector6d cartvel; cartvel << 0.6*p.vel + 3*error, toEigen(axis_error*angle_error);
                     //Update joint velocities, using the pseudoinverse of the end-effector Jacobian to map the desired Cartesian velocity (cartvel) in joint space:
                     dq_des.data = pseudoinverse(robot_->getEEJacobian().data)*cartvel ;
 
                     //Calculate the new joint positions by integrating the velocities (joint_velocities_) with the time step dt:
-                    q_des.data = joint_positions_.data + dq_des.data*dt;
+                    q_des.data = joint_positions_.data + joint_velocities_.data*dt;
     
                     //Calculate joint acceleration by discrete numerical derivative:
-                    joint_acceleration_d_.data=(dq_des.data-joint_velocity_old.data)/dt;
+                    joint_acceleration_d_.data=(joint_velocities_.data-joint_velocity_old.data)/dt;
                     
                     //Use the first method (idCntr) to calculate the required joint torques:
                     torque_values = controller_.idCntr(q_des,dq_des,joint_acceleration_d_, _Kp, _Kd);
@@ -345,7 +361,7 @@ private:
                     // Eigen::VectorXd cartvel;
                     //                     cartvel.resize(6);
                     // cartvel=cart_o+vel;
-                    Vector6d cartvel; cartvel << p.vel + error, orientation_error;
+                    Vector6d cartvel; cartvel << p.vel + error, toEigen(axis_error*angle_error);
 
                     desVel = KDL::Twist(KDL::Vector(cartvel[0], cartvel[1], cartvel[2]),KDL::Vector(cartvel[3],cartvel[4],cartvel[5]));
                     desAcc = KDL::Twist(KDL::Vector(p.acc[0], p.acc[1], p.acc[2]),KDL::Vector::Zero());
