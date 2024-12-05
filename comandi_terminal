@@ -1,10 +1,10 @@
 //Punto 2
 ros2 launch iiwa_bringup iiwa_aruco.launch.py use_sim:="true" command_interface:="velocity" robot_controller:="velocity_controller" 
- ros2 launch iiwa_bringup iiwa_aruco.launch.py use_sim:="true" command_interface:="effort" robot_controller:="effort_controller" 
+ros2 launch iiwa_bringup iiwa_aruco.launch.py use_sim:="true" command_interface:="effort" robot_controller:="effort_controller" 
 ros2 launch aruco_ros aruco_cam.launch.py
-ros2 run ros2_kdl_package ros2_kdl_node_vision_control --ros-args -p cmd_interface:="velocity" -p task:="positioning"
-ros2 run ros2_kdl_package ros2_kdl_node_vision_control --ros-args -p cmd_interface:="velocity" -p task:="look-at-point"
-ros2 run ros2_kdl_package ros2_kdl_node_vision_control --ros-args -p cmd_interface:="effort" -p task:="look-at-point"
+ros2 run ros2_kdl_package ros2_kdl_vision_control --ros-args -p cmd_interface:="velocity" -p task:="positioning"
+ros2 run ros2_kdl_package ros2_kdl_vision_control --ros-args -p cmd_interface:="velocity" -p task:="look-at-point"
+ros2 run ros2_kdl_package effort_vision_control --ros-args -p cmd_interface:="effort" -p task:="look-at-point"
 ros2 run rqt_image_view rqt_image_view 
 //Punto 1
 ros2 launch iiwa_bringup iiwa.launch.py use_sim:="true"
